@@ -59,6 +59,14 @@ then
 	. ${R}etc/init.d/rc.uuv_apps
 fi
 
+#
+# boat setup
+#
+if [ $VEHICLE_TYPE = boat ]
+then
+	# Start standard bada apps.
+	. ${R}etc/init.d/rc.bada_apps
+fi
 
 
 #
