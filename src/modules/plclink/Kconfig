@@ -1,0 +1,11 @@
+menuconfig MODULES_PLCLINK
+	bool "plclink"
+	default n
+	---help---
+		Enable support for PLCLINK
+menuconfig USER_PLCLINK
+	bool "plclink running as userspace module"
+	default y
+	depends on BOARD_PROTECTED && MODULES_PLCLINK
+	---help---
+		Put plclink in userspace memory
