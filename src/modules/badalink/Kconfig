@@ -1,0 +1,12 @@
+menuconfig MODULES_BADALINK
+	bool "badalink"
+	default n
+	---help---
+		Enable support for badalink
+
+menuconfig USER_BADALINK
+	bool "badalink running as userspace module"
+	default n
+	depends on BOARD_PROTECTED && MODULES_BADALINK
+	---help---
+		Put badalink in userspace memory
