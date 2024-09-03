@@ -1,0 +1,16 @@
+// * PLC
+//    * IP_ADDRESS
+//    * PORT
+// * PX4
+//    * IP_ADDRESS
+//    * PORT
+{
+	"PLC": {
+		"IP_ADDRESS": "192.168.0.3",
+		"PORT": 2002
+	},
+	"PX4": {
+		"IP_ADDRESS": "192.168.0.2",
+		"PORT": 2001
+	}
+}
