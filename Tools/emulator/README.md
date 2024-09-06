@@ -19,4 +19,40 @@ $ python3 plc.py
 ```bash
 $ python3 px4.py
 ```
+## ToDo
+* systemcmds/actuator_test 분석
+   * 발생시키는 msg
+* 구현
+   * actuator_outputs msg 수신하기
+   * 어떤 fields를 사용하는지 : steering, throttle
+   * 해당 값을 전달하기
 
+## Design
+* 명령 전송 단계
+   * uorb에서 actuator msg 얻기
+   * actuator msg로 PX4ToPLC 구조체 채우기
+   * PX4ToPLC를 UDP로 PLC로 전송하기
+
+* 읽기 전송 단계
+   * r
+* actuator msg -> plc packet -> make_udp packet -> udp send
+```c++
+uint8_t send_buffer[1024];
+uint8_t receive_buffer[1024];
+
+uint8_t template_write_command[40];
+uint8_t template_read_command[40] = {0x4C, };
+
+make_command(bool isWrite, Msg msg);
+
+
+void make_command(bool isWrite, Msg msg)
+{
+	if(isWrite){
+		msg
+	}
+	else{
+		send_buffer[0] =
+	}
+}
+```
