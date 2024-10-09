@@ -59,6 +59,7 @@
 #include <uORB/Publication.hpp>
 #include <uORB/topics/parameter_update.h>
 #include <px4_platform_common/px4_work_queue/ScheduledWorkItem.hpp>
+#include <uORB/topics/actuator_outputs.h>
 
 
 using namespace time_literals;
@@ -82,6 +83,8 @@ class BadaLink : public ModuleBase<BadaLink>, public ModuleParams, public px4::S
 
 	private:
 		void Run() override;
+		uORB::SubscriptionInterval _acturator_update_sub{ORB_ID(parameter_update), 1_s};
+
 		uORB::SubscriptionInterval	_parameter_update_sub{ORB_ID(parameter_update), 1_s};				/**< notification of parameter updates */
 		uORB::SubscriptionCallbackWorkItem _adc_report_sub{this, ORB_ID(adc_report)};
 

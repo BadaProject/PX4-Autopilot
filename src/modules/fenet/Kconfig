@@ -1,0 +1,5 @@
+menuconfig MODULES_FENET
+	bool "fenet"
+	default n
+	---help---
+		Enable support for fenet
