@@ -139,6 +139,7 @@ set(msg_files
 	OrbTestMedium.msg
 	ParameterUpdate.msg
 	Ping.msg
+	PlcToPx4.msg
 	PositionControllerLandingStatus.msg
 	PositionControllerStatus.msg
 	PositionSetpoint.msg
@@ -148,6 +149,7 @@ set(msg_files
 	PpsCapture.msg
 	PwmInput.msg
 	Px4ioStatus.msg
+	Px4ToPlc.msg
 	QshellReq.msg
 	QshellRetval.msg
 	RadioStatus.msg
