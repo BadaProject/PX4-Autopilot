@@ -126,6 +126,11 @@ void
 MavlinkReceiver::handle_message(mavlink_message_t *msg)
 {
 	switch (msg->msgid) {
+	/*
+	case MAVLINK_MSG_ID_PLC_TO_PX4:
+		handle_message_plc_to_px4(msg);
+		break;
+	*/
 	case MAVLINK_MSG_ID_COMMAND_LONG:
 		handle_message_command_long(msg);
 		break;
@@ -386,6 +391,18 @@ MavlinkReceiver::evaluate_target_ok(int command, int target_system, int target_c
 
 	return target_ok;
 }
+/*
+void
+handle_message_plc_to_px4(mavlink_message_t *msg)
+{
+	mavlink_plc_to_px4_t plc_to_px4;
+	mavlink_msg_plc_to_px4_decode(msg, &plc_to_px4);
+	plc_to_px4_s plc_to_px4_msg;
+	plc_to_px4_msg.timestamp = hrt_absolute_time();
+
+	plc_to_px4_pub.publish(plc_to_px4_msg);
+}
+*/
 
 void
 MavlinkReceiver::handle_message_command_long(mavlink_message_t *msg)
