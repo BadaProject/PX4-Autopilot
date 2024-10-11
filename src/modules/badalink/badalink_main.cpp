@@ -83,7 +83,8 @@ class BadaLink : public ModuleBase<BadaLink>, public ModuleParams, public px4::S
 
 	private:
 		void Run() override;
-		uORB::SubscriptionInterval _acturator_update_sub{ORB_ID(parameter_update), 1_s};
+		// uORB::Subscription _act_output_sub{ORB_ID(actuator_outputs)};
+		uORB::SubscriptionInterval _acturator_update_sub{ORB_ID(actuator_outputs), 100_ms};
 
 		uORB::SubscriptionInterval	_parameter_update_sub{ORB_ID(parameter_update), 1_s};				/**< notification of parameter updates */
 		uORB::SubscriptionCallbackWorkItem _adc_report_sub{this, ORB_ID(adc_report)};
