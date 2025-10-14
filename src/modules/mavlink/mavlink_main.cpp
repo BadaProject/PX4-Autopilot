@@ -2187,7 +2187,7 @@ Mavlink::task_main(int argc, char *argv[])
 		/* STATUSTEXT stream */
 		configure_stream("STATUSTEXT", 2.0f);// configure_stream("STATUSTEXT", 20.0f);
 
-		configure_stream("ACTUATOR_OUTPUT_STATUS", 10.0f);
+//		configure_stream("ACTUATOR_OUTPUT_STATUS", 10.0f);
 		/* COMMAND_LONG stream: use unlimited rate to send all commands */
 		configure_stream("COMMAND_LONG");
 
