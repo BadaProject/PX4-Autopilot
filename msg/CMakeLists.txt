@@ -48,6 +48,14 @@ set(msg_files
 	Airspeed.msg
 	AirspeedWind.msg
 	AutotuneAttitudeControlStatus.msg
+	BoatAttitudeSetpoint.msg
+	BoatAttitudeStatus.msg
+	BoatPositionSetpoint.msg
+	BoatRateSetpoint.msg
+	BoatRateStatus.msg
+	BoatSteeringSetpoint.msg
+	BoatThrottleSetpoint.msg
+	BoatVelocityStatus.msg
 	ButtonEvent.msg
 	CameraCapture.msg
 	CameraStatus.msg
