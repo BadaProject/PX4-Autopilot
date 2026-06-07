@@ -365,9 +365,133 @@ reset 시 `_stab_yaw_setpoint`, `_pos_ctl_course_direction`, `_pos_ctl_start_pos
 
 - `rover_speed_setpoint`를 받아 throttle setpoint를 만든다.
 - 초기에는 기존 `BOAT_THR_FF`, `BOAT_THR_SCALE`, `BOAT_THR_RATE` 기반 feedforward를 사용한다.
-- 추후 `Kup/Kui/Kud` 기반 speed feedback을 옵션으로 추가한다.
+- 현재 구현은 measured speed를 status에 publish하지만 throttle 계산에는 사용하지 않는다. 따라서 폐루프 속도 제어는 아직 구현되지 않았다.
+- 현재 구현의 `BOAT_THR_RATE`는 update 1회당 thrust 변화량 제한이며, `dt` 기반 speed ramp 또는 diesel engine soft-start는 아직 구현되어 있지 않다.
+- 추후 `BOAT_SPD_P/I/D` 기반 speed feedback을 옵션으로 추가한다.
 - measured speed는 `vehicle_local_position` velocity를 body frame으로 변환해 사용한다.
 - MANUAL 모드에서 `rover_throttle_setpoint`가 직접 publish되는 경우에는 speed controller가 개입하지 않는다.
+
+#### 7.5.1 Closed-loop speed control implementation plan
+
+폐루프 속도 제어는 기존 feedforward 경로를 유지하면서 measured speed feedback을 더하는 형태로 구현한다.
+
+입력:
+
+- `rover_speed_setpoint.speed_body_x`
+- `vehicle_local_position.vx/vy/vz`
+- `vehicle_attitude`
+
+상태:
+
+- body frame surge speed `measured_speed_body_x`
+- speed error integral
+- previous speed error
+- last update timestamp
+- last thrust command
+
+제어식:
+
+```text
+speed_error = speed_setpoint - measured_speed_body_x
+feedforward_thrust = BOAT_THR_FF * speed_setpoint
+feedback_thrust = BOAT_SPD_P * speed_error
+                + BOAT_SPD_I * speed_error_integral
+                + BOAT_SPD_D * (speed_error - prev_speed_error) / dt
+raw_thrust = feedforward_thrust + feedback_thrust
+thrust = slew_limit(raw_thrust, last_thrust, BOAT_THR_RATE)
+normalized_throttle = remap_and_constrain(thrust)
+```
+
+구현 세부:
+
+- `dt`는 `hrt_absolute_time()` 차이로 계산하고, 첫 update 또는 비정상 `dt`에서는 D항을 0으로 둔다.
+- `speed_setpoint <= 0`이면 integral과 derivative 상태를 reset하고 throttle 0을 publish한다.
+- integral은 `BOAT_SPD_IMAX`로 제한한다.
+- throttle이 `[0, 1]` 제한에 걸리고 error가 같은 방향으로 integral을 더 키우는 경우 anti-windup을 적용한다.
+- 후진 thrust가 지원되지 않는 현재 actuator 경로에서는 negative speed setpoint를 0으로 constrain한다.
+- `rover_speed_status.pid_throttle_body_x_integral`에는 실제 integral 기여분 또는 integral 상태를 publish한다.
+- `BOAT_SPD_EN`이 0이면 기존 feedforward-only 동작을 유지한다.
+
+구현 순서:
+
+1. `module.yaml`에 `BOAT_SPD_EN`, `BOAT_SPD_P`, `BOAT_SPD_I`, `BOAT_SPD_D`, `BOAT_SPD_IMAX`를 추가한다.
+2. `BoatSpeedControl.hpp`에 PID 상태와 새 파라미터를 추가한다.
+3. `BoatSpeedControl::reset()`에서 PID 상태와 timestamp를 초기화한다.
+4. `BoatSpeedControl::updateSpeedControl()`에서 feedforward-only와 closed-loop 경로를 `BOAT_SPD_EN`으로 분기한다.
+5. measured speed invalid 또는 local position velocity invalid 상태에서는 feedback을 사용하지 않고 feedforward-only로 degrade한다.
+6. `rover_speed_status`에 measured speed, adjusted setpoint, integral 상태가 항상 publish되는지 확인한다.
+
+#### 7.5.2 Diesel engine soft-start and speed ramp plan
+
+Boat 추진기는 디젤 엔진을 사용하므로 정지 또는 저속 상태에서 speed/throttle 명령이 step으로 들어가면 안 된다. 특히 AUTO/POSCTL/OFFBOARD에서 mission speed가 갑자기 들어오는 경우에도 실제 controller 내부 목표 속도와 throttle 명령은 천천히 상승해야 한다.
+
+현재 구현 상태:
+
+- `BoatSpeedControl`은 `_last_thrust`와 `BOAT_THR_RATE`로 thrust command 변화량을 제한한다.
+- 하지만 `BOAT_THR_RATE`는 초당 변화율이 아니라 controller update 1회당 변화량으로 적용된다.
+- `rover_speed_setpoint.speed_body_x`는 그대로 `speed_setpoint`가 되며, 별도의 speed setpoint ramp가 없다.
+- MANUAL 모드는 `rover_throttle_setpoint`를 직접 publish하므로 `BoatSpeedControl`의 thrust slew limit을 거치지 않는다.
+
+구현 방향은 두 단계 제한을 함께 둔다.
+
+1. Speed setpoint ramp:
+
+```text
+requested_speed_setpoint = constrain(rover_speed_setpoint.speed_body_x, 0, BOAT_SPEED_LIM)
+
+if BOAT_RAMP_SPD > 0 and startup_ramp_active:
+    target_speed_setpoint = min(requested_speed_setpoint, BOAT_RAMP_SPD)
+else:
+    target_speed_setpoint = requested_speed_setpoint
+
+speed_rate_limit = target_speed_setpoint > adjusted_speed_setpoint ? BOAT_SPD_ACC_UP : BOAT_SPD_ACC_DN
+adjusted_speed_setpoint = slew_limit_by_dt(
+    target_speed_setpoint,
+    adjusted_speed_setpoint,
+    speed_rate_limit * dt)
+```
+
+2. Engine throttle ramp:
+
+```text
+raw_throttle = speed_controller_output
+throttle_rate_limit = raw_throttle > last_throttle ? BOAT_ENG_RAMP_UP : BOAT_ENG_RAMP_DN
+limited_throttle = slew_limit_by_dt(raw_throttle, last_throttle, throttle_rate_limit * dt)
+```
+
+설계 원칙:
+
+- `BOAT_SPD_ACC_UP`은 초기 속도 상승을 제한하는 핵심 파라미터이며 단위는 `m/s^2`로 둔다.
+- `BOAT_RAMP_SPD`는 diesel startup ramp target speed이다. `BOAT_RAMP_TARGET_SPEED` 개념의 PX4 파라미터명이며, PX4 파라미터 이름 길이 제한을 고려해 짧은 이름을 사용한다.
+- `BOAT_RAMP_SPD > 0`이면 정지 또는 저속에서 출발할 때 controller는 mission/POSCTL/OFFBOARD 요청 속도가 더 크더라도 먼저 `BOAT_RAMP_SPD`까지만 천천히 올린다.
+- `adjusted_speed_setpoint` 또는 measured speed가 `BOAT_RAMP_SPD` 근처에 도달하고 `BOAT_RAMP_HOLD` 시간이 지나면 `startup_ramp_active`를 해제하고 원래 요청 속도까지 계속 ramp한다.
+- 요청 속도가 `BOAT_RAMP_SPD`보다 낮으면 별도 startup phase 없이 요청 속도까지만 ramp한다.
+- `BOAT_RAMP_SPD <= 0`이면 특정 속도까지 먼저 올리는 startup target 기능을 비활성화하고 일반 speed ramp만 사용한다.
+- `BOAT_ENG_RAMP_UP`은 normalized throttle의 초당 증가량으로 둔다.
+- 감속은 안전 정지 요구가 있으므로 상승보다 빠르게 허용한다. `BOAT_SPD_ACC_DN`, `BOAT_ENG_RAMP_DN`을 별도로 둔다.
+- `adjusted_speed_setpoint`를 feedforward와 feedback PID 모두의 목표값으로 사용한다.
+- PID integral은 `adjusted_speed_setpoint` 기준 error로 적분한다. 원본 target speed 기준으로 적분하면 ramp 중 windup이 발생할 수 있다.
+- 정지 상태에서 양수 speed setpoint로 처음 전환될 때 `_adjusted_speed_setpoint`, `_last_throttle`, `_last_thrust`, ramp timestamp를 0에서 시작한다.
+- disarm, mode change, speed setpoint 0, failsafe stop에서는 ramp 상태와 PID integral을 reset한다.
+- measured speed가 이미 adjusted setpoint보다 높은 경우에는 ramp-up을 기다리지 말고 feedback이 throttle을 줄일 수 있게 한다.
+- `dt`가 비정상적으로 크면 ramp jump를 막기 위해 `dt`를 `BOAT_CTRL_DT_MAX` 또는 내부 상한으로 제한한다.
+
+MANUAL 모드 처리:
+
+- 디젤 엔진 보호를 위해 최종 throttle ramp는 `BoatActControl`에도 두는 방안을 우선 검토한다.
+- 이렇게 하면 MANUAL direct throttle, ACRO direct throttle, speed controller 출력이 모두 같은 engine ramp limiter를 통과한다.
+- 단, emergency stop/disarm/failsafe에서는 ramp down을 기다리지 않고 즉시 throttle 0을 publish한다.
+
+구현 순서:
+
+1. `BoatSpeedControl`에 `_adjusted_speed_setpoint`, `_last_speed_ramp_update`, `_last_throttle` 기반 speed ramp를 추가한다.
+2. `BoatSpeedControl`에 `_startup_ramp_active`, `_startup_ramp_reached_time` 상태를 추가한다.
+3. `BOAT_RAMP_SPD`가 설정되어 있으면 정지/저속 출발 시 `requested_speed_setpoint` 대신 `min(requested_speed_setpoint, BOAT_RAMP_SPD)`를 1차 목표로 사용한다.
+4. `BOAT_RAMP_SPD` 도달 후 `BOAT_RAMP_HOLD`가 지나면 startup ramp를 종료하고 원래 요청 속도까지 ramp한다.
+5. `BoatSpeedControl`의 feedforward/PID 입력을 raw speed setpoint가 아니라 ramp된 `adjusted_speed_setpoint`로 변경한다.
+6. `BoatActControl`에 최종 throttle 증가율 limiter를 추가해 MANUAL direct throttle에도 diesel soft-start를 적용한다.
+7. disarm/mode change/stop/failsafe 경로에서 speed ramp와 engine ramp 상태가 reset되는지 확인한다.
+8. `rover_speed_status.adjusted_speed_body_x_setpoint`에 ramp 이후 목표 속도를 publish해 로그에서 ramp 동작을 확인할 수 있게 한다.
 
 ### 7.6 `BoatAttControl`
 
@@ -405,7 +529,55 @@ reset 시 `_stab_yaw_setpoint`, `_pos_ctl_course_direction`, `_pos_ctl_start_pos
 - `BOAT_THR_RATE`: thrust slew limit, default `0.01`
 - `BOAT_THR_FF`: velocity to thrust feedforward gain, default `0.21`
 - `BOAT_THR_SCALE`: thrust remap denominator, default `0.00058466`
+- `BOAT_SPD_EN`: closed-loop speed feedback enable, default `0`
+- `BOAT_SPD_P`: speed feedback P gain, default `0.0`
+- `BOAT_SPD_I`: speed feedback I gain, default `0.0`
+- `BOAT_SPD_D`: speed feedback D gain, default `0.0`
+- `BOAT_SPD_IMAX`: speed feedback integral limit, default `0.2`
+- `BOAT_RAMP_SPD`: diesel startup ramp target speed, default `0.0 m/s` disabled
+- `BOAT_RAMP_HOLD`: hold time after reaching startup ramp target speed, default `2.0 s`
+- `BOAT_SPD_ACC_UP`: speed setpoint ramp-up limit for diesel soft-start, default `0.2 m/s^2`
+- `BOAT_SPD_ACC_DN`: speed setpoint ramp-down limit, default `0.5 m/s^2`
+- `BOAT_ENG_RAMP_UP`: normalized throttle ramp-up limit, default `0.05 / s`
+- `BOAT_ENG_RAMP_DN`: normalized throttle ramp-down limit, default `0.20 / s`
 - `BOAT_DEBUG`: publish/log debug data, default `0`
+
+### 8.1 Parameter summary table
+
+이 표는 현재 `module.yaml`에 등록된 파라미터와 본 계획서에서 추가 예정인 파라미터를 함께 정리한다.
+
+| Parameter | Full name / meaning | 용도 | 구현 / 구현 계획 |
+| --- | --- | --- | --- |
+| `BOAT_ACC_RAD` | Boat acceptance radius | waypoint acceptance radius. AUTO에서 `position_controller_status.acceptance_radius`로 publish하고, position controller 정지 조건에 사용한다. | 구현됨. `module.yaml` 등록, `BoatAutoMode`, `BoatPosControl`에서 사용. |
+| `BOAT_SPEED_LIM` | Boat speed limit | mission cruising speed fallback과 manual POSCTL throttle-to-speed 변환의 상한. speed controller 입력 제한에도 사용한다. | 구현됨. `module.yaml` 등록, `BoatAutoMode`, `BoatManualMode`, `BoatPosControl`, `BoatSpeedControl`에서 사용. |
+| `BOAT_LOOKAHD` | Boat carrot lookahead distance | carrot/LOS target point를 선분 projection 앞쪽에 생성하는 거리. POSCTL course hold target 생성에도 사용한다. | 구현됨. `module.yaml` 등록, `BoatPosControl`, `BoatManualMode`에서 사용. |
+| `BOAT_START_DIST` | Boat first waypoint temporary start distance | navigator가 previous waypoint를 제공하지 않는 첫 mission 구간에서 임시 `start_ned`를 current position 뒤쪽에 생성하는 거리. | 구현됨. `module.yaml` 등록, `BoatAutoMode`에서 사용. |
+| `BOAT_STR_P` | Boat steering proportional gain | yaw/LOS error를 steering command로 바꾸는 P gain. | 구현됨. `module.yaml` 등록, `BoatAttControl`에서 사용. |
+| `BOAT_STR_D` | Boat steering derivative gain | yaw/LOS error derivative에 대한 D gain. | 구현됨. `module.yaml` 등록, `BoatAttControl`에서 사용. |
+| `BOAT_STR_MAX` | Boat steering command maximum | steering command saturation 및 normalized steering 변환 기준값. | 구현됨. `module.yaml` 등록, `BoatAttControl`에서 사용. |
+| `BOAT_STR_RATE` | Boat steering command slew limit | steering command 변화량 제한. 현재는 update 1회당 변화량 제한이다. | 구현됨. `module.yaml` 등록, `BoatAttControl`에서 사용. |
+| `BOAT_Y_RATE_LIM` | Boat manual yaw-rate limit | ACRO/STAB/POSCTL manual roll 입력을 yaw-rate setpoint 또는 normalized steering으로 변환할 때의 최대 yaw rate. | 구현됨. `module.yaml` 등록, `BoatManualMode`, `BoatAttControl`에서 사용. |
+| `BOAT_Y_STICK_DZ` | Boat yaw stick deadzone | manual roll stick deadzone. | 구현됨. `module.yaml` 등록, `BoatManualMode`에서 사용. |
+| `BOAT_Y_EXPO` | Boat yaw stick expo | manual yaw input expo shaping. | 구현됨. `module.yaml` 등록, `BoatManualMode`에서 사용. |
+| `BOAT_Y_SUPEXPO` | Boat yaw stick superexpo | manual yaw input superexpo shaping. | 구현됨. `module.yaml` 등록, `BoatManualMode`에서 사용. |
+| `BOAT_THR_MAX` | Boat remapped thrust maximum | remapped thrust를 normalized throttle `[0, 1]`로 변환하는 상한. | 구현됨. `module.yaml` 등록, `BoatSpeedControl`에서 사용. |
+| `BOAT_THR_RATE` | Boat thrust slew limit | thrust command 변화량 제한. 현재는 update 1회당 thrust delta 제한이며 diesel soft-start용 초당 ramp는 아니다. | 구현됨. `module.yaml` 등록, `BoatSpeedControl`에서 사용. `dt` 기반 ramp는 별도 계획. |
+| `BOAT_THR_FF` | Boat velocity-to-thrust feedforward gain | speed setpoint를 thrust feedforward로 변환하는 gain. | 구현됨. `module.yaml` 등록, `BoatSpeedControl`에서 사용. |
+| `BOAT_THR_SCALE` | Boat thrust remap denominator | thrust를 `sqrt(thrust / scale)` 형태로 remap하는 denominator. | 구현됨. `module.yaml` 등록, `BoatSpeedControl`에서 사용. |
+| `BOAT_DEBUG` | Boat debug logging enable | boat control debug logging 또는 extra status 출력을 켜기 위한 flag. | 등록됨, 미사용. `module.yaml`에는 있으나 현재 code path에서는 사용하지 않음. |
+| `BOAT_SPD_EN` | Boat speed feedback enable | feedforward-only와 measured-speed feedback PID 경로를 선택한다. | 구현 계획. `module.yaml` 추가 및 `BoatSpeedControl` 분기 필요. |
+| `BOAT_SPD_P` | Boat speed feedback P gain | `adjusted_speed_setpoint - measured_speed_body_x` error의 P feedback. | 구현 계획. `BoatSpeedControl` closed-loop speed PID에 추가. |
+| `BOAT_SPD_I` | Boat speed feedback I gain | speed error integral feedback. | 구현 계획. anti-windup 및 reset 조건과 함께 추가. |
+| `BOAT_SPD_D` | Boat speed feedback D gain | speed error derivative feedback. | 구현 계획. `dt` 기반 derivative, first update D항 0 처리. |
+| `BOAT_SPD_IMAX` | Boat speed integral maximum | speed PID integral clamp. | 구현 계획. integral windup 제한에 사용. |
+| `BOAT_RAMP_SPD` | Boat diesel startup ramp target speed | 정지/저속 출발 시 요청 속도가 더 크더라도 먼저 이 속도까지 천천히 상승시키는 startup target speed. `BOAT_RAMP_TARGET_SPEED` 개념의 PX4 길이 제한 대응 이름. | 구현 계획. `BoatSpeedControl`에 startup ramp state 추가 필요. |
+| `BOAT_RAMP_HOLD` | Boat diesel startup ramp hold time | `BOAT_RAMP_SPD` 도달 후 원래 요청 속도로 넘어가기 전에 유지할 시간. | 구현 계획. `_startup_ramp_reached_time` 기반 hold logic 추가 필요. |
+| `BOAT_SPD_ACC_UP` | Boat speed setpoint ramp-up acceleration | `adjusted_speed_setpoint`가 목표 속도까지 증가할 때의 최대 기울기, 단위 `m/s^2`. | 구현 계획. diesel soft-start speed ramp에 사용. |
+| `BOAT_SPD_ACC_DN` | Boat speed setpoint ramp-down acceleration | speed setpoint 감소 시 최대 기울기. 상승보다 빠른 감속을 허용한다. | 구현 계획. speed ramp down에 사용. |
+| `BOAT_ENG_RAMP_UP` | Boat engine throttle ramp-up rate | 최종 normalized throttle의 초당 증가율 제한. MANUAL direct throttle도 보호하기 위해 actuator 직전 적용을 검토한다. | 구현 계획. `BoatActControl` final throttle ramp limiter로 추가. |
+| `BOAT_ENG_RAMP_DN` | Boat engine throttle ramp-down rate | 최종 normalized throttle의 초당 감소율 제한. disarm/failsafe stop은 우회해 즉시 0으로 내려야 한다. | 구현 계획. `BoatActControl` final throttle ramp limiter로 추가. |
+
+`BOAT_CTRL_DT_MAX`는 현재 정식 파라미터가 아니라 ramp jump 방지를 위한 내부 `dt` 상한 또는 추후 파라미터 후보로만 언급되어 있다.
 
 Waypoint list, mission index, legacy start waypoint 관련 파라미터는 만들지 않는다.
 
@@ -436,11 +608,14 @@ rover_control
 7. `BoatPosControl`에 `start_ned -> target_waypoint_ned` 선분 기반 carrot/LOS 계산을 구현한다.
 8. `BoatPosControl`에서 `rover_speed_setpoint`와 yaw 또는 steering setpoint를 publish한다.
 9. `BoatSpeedControl`에 기존 thrust feedforward, remap, slew limit을 구현한다.
-10. `BoatAttControl`에 기존 steering PD와 yaw-rate to steering 변환을 구현한다.
-11. `BoatRateControl`은 초기 구현 범위에서 제외한다.
-12. `BoatActControl`에서 normalized steering/throttle을 actuator topic으로 publish한다.
-13. `module.yaml` 파라미터를 추가하고 controller마다 `ModuleParams`로 연결한다.
-14. disarm, mode change, local position reset, mission setpoint update, manual stick input 조건에서 reset/stop 동작을 검증한다.
+10. `BoatSpeedControl`에 `BOAT_SPD_EN`으로 선택 가능한 measured-speed feedback PID를 추가한다.
+11. `BoatSpeedControl`에 `BOAT_RAMP_SPD`까지 먼저 천천히 올리는 diesel startup target speed ramp를 추가한다.
+12. `BoatActControl`에 final throttle ramp limiter를 추가해 MANUAL direct throttle도 보호한다.
+13. `BoatAttControl`에 기존 steering PD와 yaw-rate to steering 변환을 구현한다.
+14. `BoatRateControl`은 초기 구현 범위에서 제외한다.
+15. `BoatActControl`에서 normalized steering/throttle을 actuator topic으로 publish한다.
+16. `module.yaml` 파라미터를 추가하고 controller마다 `ModuleParams`로 연결한다.
+17. disarm, mode change, local position reset, mission setpoint update, manual stick input 조건에서 reset/stop 동작을 검증한다.
 
 ## 11. Verification Plan
 
@@ -455,6 +630,16 @@ rover_control
 - POSCTL에서 roll input이 들어오면 position setpoint가 invalid 처리되는지 확인
 - steering normalized 출력이 항상 `[-1, 1]`인지 확인
 - throttle normalized 출력이 항상 `[0, 1]`인지 확인
+- `BOAT_SPD_EN=0`에서 기존 feedforward-only throttle 출력이 유지되는지 확인
+- `BOAT_SPD_EN=1`에서 speed error가 양수이면 throttle이 증가하고 음수이면 감소하는지 확인
+- speed setpoint가 0이 되거나 reset이 호출되면 speed PID integral이 초기화되는지 확인
+- throttle saturation 중 integral windup이 제한되는지 확인
+- 정지 상태에서 speed setpoint가 step으로 들어와도 `adjusted_speed_body_x_setpoint`가 `BOAT_SPD_ACC_UP` 이하의 기울기로 증가하는지 확인
+- 요청 speed setpoint가 `BOAT_RAMP_SPD`보다 크면 `adjusted_speed_body_x_setpoint`가 먼저 `BOAT_RAMP_SPD`까지 ramp되고 `BOAT_RAMP_HOLD` 이후 원래 요청 속도까지 계속 ramp되는지 확인
+- 요청 speed setpoint가 `BOAT_RAMP_SPD`보다 작으면 `BOAT_RAMP_SPD`까지 과도하게 올라가지 않고 요청 속도에서 멈추는지 확인
+- throttle command가 step으로 들어와도 최종 actuator throttle이 `BOAT_ENG_RAMP_UP` 이하의 기울기로 증가하는지 확인
+- MANUAL direct throttle에서도 final throttle ramp limiter가 적용되는지 확인
+- disarm/failsafe/emergency stop에서는 throttle ramp를 우회하고 즉시 0 throttle이 publish되는지 확인
 
 ### 11.2 PX4 runtime check
 
@@ -466,6 +651,8 @@ rover_control
 - ACRO에서 roll stick이 yaw-rate setpoint로 반영되는지 확인
 - STAB에서 roll stick release 시 heading hold가 유지되는지 확인
 - POSCTL에서 throttle stick이 speed setpoint로 반영되고 roll centered 상태에서 course hold target이 생성되는지 확인
+- `rover_speed_status.measured_speed_body_x`, `adjusted_speed_body_x_setpoint`, `pid_throttle_body_x_integral`이 closed-loop tuning에 필요한 값으로 publish되는지 확인
+- AUTO/POSCTL/OFFBOARD에서 목표 속도가 갑자기 바뀌어도 로그상 speed setpoint와 throttle이 diesel soft-start 제한을 따라 천천히 상승하는지 확인
 - mission 완료 또는 disarm 시 motor 정지 명령이 나가는지 확인
 
 ### 11.3 Field/bench comparison
@@ -473,7 +660,7 @@ rover_control
 - 같은 `start/current/target` 조건에서 기존 ROS 노드의 `LOS`, `steer`, `remap_thrust`, `desired_velocity`와 PX4 로그를 비교한다.
 - 차이가 나면 먼저 좌표계와 yaw 부호를 확인한다.
 - actuator 방향이 반대이면 mixer 또는 actuator parameter에서 보정하고 알고리즘 부호는 최대한 유지한다.
-- `BOAT_LOOKAHD`, `BOAT_STR_P`, `BOAT_STR_D`, `BOAT_THR_FF`, `BOAT_THR_RATE` 순서로 튜닝한다.
+- `BOAT_LOOKAHD`, `BOAT_STR_P`, `BOAT_STR_D`, `BOAT_SPD_ACC_UP`, `BOAT_ENG_RAMP_UP`, `BOAT_THR_FF`, `BOAT_THR_RATE` 순서로 튜닝한다.
 - 조종기 bench test는 propeller/추진기 안전 상태에서 MANUAL, STAB, POSCTL 순서로 진행한다.
 
 ## 12. Open Decisions
