@@ -1,0 +1,181 @@
+module_name: Boat Control
+
+parameters:
+  - group: Boat Control
+    definitions:
+      BOAT_ACC_RAD:
+        description:
+          short: Boat waypoint acceptance radius
+        type: float
+        unit: m
+        min: 0
+        max: 100
+        increment: 0.1
+        decimal: 1
+        default: 8.0
+
+      BOAT_SPEED_LIM:
+        description:
+          short: Boat speed limit
+        type: float
+        unit: m/s
+        min: 0
+        max: 50
+        increment: 0.1
+        decimal: 1
+        default: 5.0
+
+      BOAT_LOOKAHD:
+        description:
+          short: Boat carrot lookahead distance
+        type: float
+        unit: m
+        min: 0.1
+        max: 200
+        increment: 0.1
+        decimal: 1
+        default: 50.0
+
+      BOAT_START_DIST:
+        description:
+          short: Boat first waypoint temporary start distance
+          long: |
+            Distance used to create a temporary start point behind the current
+            vehicle position when the navigator does not provide a previous
+            waypoint for the first mission segment.
+        type: float
+        unit: m
+        min: 0
+        max: 100
+        increment: 0.1
+        decimal: 1
+        default: 20.0
+
+      BOAT_STR_P:
+        description:
+          short: Boat steering proportional gain
+        type: float
+        min: -1000
+        max: 1000
+        increment: 1
+        decimal: 1
+        default: 500.0
+
+      BOAT_STR_D:
+        description:
+          short: Boat steering derivative gain
+        type: float
+        min: 0
+        max: 5000
+        increment: 1
+        decimal: 1
+        default: 1000.0
+
+      BOAT_STR_MAX:
+        description:
+          short: Boat steering command maximum
+        type: float
+        min: 0.001
+        max: 1000
+        increment: 1
+        decimal: 1
+        default: 150.0
+
+      BOAT_STR_RATE:
+        description:
+          short: Boat steering command slew limit
+        type: float
+        min: -1
+        max: 1000
+        increment: 0.1
+        decimal: 1
+        default: 24.5
+
+      BOAT_Y_RATE_LIM:
+        description:
+          short: Boat manual yaw rate limit
+        type: float
+        unit: deg/s
+        min: 0
+        max: 1000
+        increment: 1
+        decimal: 1
+        default: 30.0
+
+      BOAT_Y_STICK_DZ:
+        description:
+          short: Boat yaw stick deadzone
+        type: float
+        min: 0
+        max: 1
+        increment: 0.01
+        decimal: 2
+        default: 0.05
+
+      BOAT_Y_EXPO:
+        description:
+          short: Boat yaw stick expo
+        type: float
+        min: 0
+        max: 1
+        increment: 0.01
+        decimal: 2
+        default: 0.0
+
+      BOAT_Y_SUPEXPO:
+        description:
+          short: Boat yaw stick superexpo
+        type: float
+        min: 0
+        max: 1
+        increment: 0.01
+        decimal: 2
+        default: 0.0
+
+      BOAT_THR_MAX:
+        description:
+          short: Boat remapped thrust maximum
+        type: float
+        min: 0.001
+        max: 100
+        increment: 0.1
+        decimal: 1
+        default: 48.0
+
+      BOAT_THR_RATE:
+        description:
+          short: Boat thrust slew limit
+        type: float
+        min: -1
+        max: 100
+        increment: 0.01
+        decimal: 2
+        default: 0.01
+
+      BOAT_THR_FF:
+        description:
+          short: Boat velocity to thrust feedforward gain
+        type: float
+        min: 0
+        max: 10
+        increment: 0.01
+        decimal: 3
+        default: 0.21
+
+      BOAT_THR_SCALE:
+        description:
+          short: Boat thrust remap denominator
+        type: float
+        min: 0.000001
+        max: 1
+        increment: 0.000001
+        decimal: 6
+        default: 0.00058466
+
+      BOAT_DEBUG:
+        description:
+          short: Enable boat control debug logging
+        type: int32
+        min: 0
+        max: 1
+        default: 0

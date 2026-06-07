@@ -1,0 +1,3 @@
+add_subdirectory(BoatAutoMode)
+add_subdirectory(BoatManualMode)
+add_subdirectory(BoatOffboardMode)
