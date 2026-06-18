@@ -60,6 +60,15 @@ then
 fi
 
 #
+# Boat setup.
+#
+if [ $VEHICLE_TYPE = boat ]
+then
+	# Start boat apps.
+	. ${R}etc/init.d/rc.boat_apps
+fi
+
+#
 # VTOL setup.
 #
 if [ $VEHICLE_TYPE = vtol ]

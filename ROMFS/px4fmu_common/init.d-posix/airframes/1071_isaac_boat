@@ -1,0 +1,28 @@
+#!/bin/sh
+#
+# @name Isaac Sim Boat
+# @type Boat
+#
+
+. ${R}etc/init.d/rc.boat_defaults
+
+PX4_SIMULATOR=${PX4_SIMULATOR:=isaac}
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=isaac_boat}
+
+param set-default CA_AIRFRAME 9
+
+param set-default CA_ROTOR_COUNT 2
+param set-default CA_ROTOR0_AX 1
+param set-default CA_ROTOR0_AZ 0
+param set-default CA_ROTOR0_KM 0
+param set-default CA_ROTOR0_PX -2
+param set-default CA_ROTOR0_PY -1
+param set-default CA_ROTOR1_AX 1
+param set-default CA_ROTOR1_AZ 0
+param set-default CA_ROTOR1_KM 0
+param set-default CA_ROTOR1_PX -2
+param set-default CA_ROTOR1_PY 1
+param set-default CA_R_REV 3
+
+param set-default PWM_MAIN_FUNC1 101
+param set-default PWM_MAIN_FUNC2 102

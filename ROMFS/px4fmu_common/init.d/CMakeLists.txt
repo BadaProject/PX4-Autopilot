@@ -97,6 +97,13 @@ if(CONFIG_MODULES_ROVER_MECANUM)
 	)
 endif()
 
+if(CONFIG_MODULES_BOAT_CONTROL)
+	px4_add_romfs_files(
+		rc.boat_apps
+		rc.boat_defaults
+	)
+endif()
+
 if(CONFIG_MODULES_UUV_ATT_CONTROL)
 	px4_add_romfs_files(
 		rc.uuv_apps
