@@ -11,17 +11,26 @@ PX4_SIM_MODEL=${PX4_SIM_MODEL:=isaac_boat}
 
 param set-default CA_AIRFRAME 9
 
+# Aura/BadaSim actuator contract:
+# - CA_ROTOR0 / PWM_MAIN_FUNC1 = port_thruster
+# - CA_ROTOR1 / PWM_MAIN_FUNC2 = starboard_thruster
+# - Position matches BadaSim sim/vehicles/usv/aura_model.py:
+#   port_thruster      = (x: -3.7 m, y:  0.9 m, z: -0.15 m)
+#   starboard_thruster = (x: -3.7 m, y: -0.9 m, z: -0.15 m)
+# - Both thrusters point forward along body +X.
 param set-default CA_ROTOR_COUNT 2
 param set-default CA_ROTOR0_AX 1
 param set-default CA_ROTOR0_AZ 0
 param set-default CA_ROTOR0_KM 0
-param set-default CA_ROTOR0_PX -2
-param set-default CA_ROTOR0_PY -1
+param set-default CA_ROTOR0_PX -3.7
+param set-default CA_ROTOR0_PY 0.9
+param set-default CA_ROTOR0_PZ -0.15
 param set-default CA_ROTOR1_AX 1
 param set-default CA_ROTOR1_AZ 0
 param set-default CA_ROTOR1_KM 0
-param set-default CA_ROTOR1_PX -2
-param set-default CA_ROTOR1_PY 1
+param set-default CA_ROTOR1_PX -3.7
+param set-default CA_ROTOR1_PY -0.9
+param set-default CA_ROTOR1_PZ -0.15
 param set-default CA_R_REV 3
 
 param set-default PWM_MAIN_FUNC1 101
