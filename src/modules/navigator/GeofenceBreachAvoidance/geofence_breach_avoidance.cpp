@@ -37,6 +37,16 @@
 
 using Vector2d = matrix::Vector2<double>;
 
+namespace
+{
+void updateParamIfValid(param_t handle, float &value)
+{
+	if (handle != PARAM_INVALID) {
+		param_get(handle, &value);
+	}
+}
+} // namespace
+
 
 GeofenceBreachAvoidance::GeofenceBreachAvoidance(ModuleParams *parent) :
 	ModuleParams(parent)
@@ -54,12 +64,12 @@ GeofenceBreachAvoidance::GeofenceBreachAvoidance(ModuleParams *parent) :
 void GeofenceBreachAvoidance::updateParameters()
 {
 	ModuleParams::updateParams();
-	param_get(_paramHandle.param_mpc_jerk_max, &_params.param_mpc_jerk_max);
-	param_get(_paramHandle.param_mpc_acc_hor, &_params.param_mpc_acc_hor);
-	param_get(_paramHandle.param_mpc_acc_hor_max, &_params.param_mpc_acc_hor_max);
-	param_get(_paramHandle.param_mpc_jerk_auto, &_params.param_mpc_jerk_auto);
-	param_get(_paramHandle.param_mpc_acc_up_max, &_params.param_mpc_acc_up_max);
-	param_get(_paramHandle.param_mpc_acc_down_max, &_params.param_mpc_acc_down_max);
+	updateParamIfValid(_paramHandle.param_mpc_jerk_max, _params.param_mpc_jerk_max);
+	updateParamIfValid(_paramHandle.param_mpc_acc_hor, _params.param_mpc_acc_hor);
+	updateParamIfValid(_paramHandle.param_mpc_acc_hor_max, _params.param_mpc_acc_hor_max);
+	updateParamIfValid(_paramHandle.param_mpc_jerk_auto, _params.param_mpc_jerk_auto);
+	updateParamIfValid(_paramHandle.param_mpc_acc_up_max, _params.param_mpc_acc_up_max);
+	updateParamIfValid(_paramHandle.param_mpc_acc_down_max, _params.param_mpc_acc_down_max);
 
 	updateMinHorDistToFenceMultirotor();
 	updateMinVertDistToFenceMultirotor();
