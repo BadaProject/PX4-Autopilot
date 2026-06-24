@@ -26,11 +26,14 @@ public:
 
 	void updateActControl();
 	void stopVehicle();
+	void reset();
 
 protected:
 	void updateParams() override;
 
 private:
+	float slewSignedThrust(float signed_thrust_setpoint);
+
 	uORB::Subscription _rover_steering_setpoint_sub{ORB_ID(rover_steering_setpoint)};
 	uORB::Subscription _rover_throttle_setpoint_sub{ORB_ID(rover_throttle_setpoint)};
 
@@ -38,10 +41,14 @@ private:
 	uORB::Publication<actuator_servos_s> _actuator_servos_pub{ORB_ID(actuator_servos)};
 
 	hrt_abstime _timestamp{0};
-	float _throttle_setpoint{NAN};
+	hrt_abstime _last_signed_thrust_update{0};
+	float _signed_thrust_setpoint{NAN};
+	float _last_signed_thrust_setpoint{0.f};
 	float _steering_setpoint{NAN};
 
 	DEFINE_PARAMETERS(
-		(ParamInt<px4::params::CA_R_REV>) _param_r_rev
+		(ParamInt<px4::params::CA_R_REV>)          _param_r_rev,
+		(ParamFloat<px4::params::BOAT_ENG_RAMP_UP>) _param_boat_eng_ramp_up,
+		(ParamFloat<px4::params::BOAT_ENG_RAMP_DN>) _param_boat_eng_ramp_dn
 	)
 };

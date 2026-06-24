@@ -174,6 +174,7 @@ void BoatControl::reset()
 	_boat_pos_control.reset();
 	_boat_speed_control.reset();
 	_boat_att_control.reset();
+	_boat_act_control.reset();
 	_manual_mode.reset();
 }
 

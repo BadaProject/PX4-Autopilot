@@ -4,7 +4,7 @@
 The script is intentionally usable as a standalone smoke test: it connects to
 PX4's simulator_mavlink TCP endpoint, sends simple HIL sensor/GPS data, and
 prints actuator commands. In Isaac Sim, feed BoatState from a physics callback
-and apply BoatActuatorCommand to the boat thrusters.
+and apply BoatActuatorCommand to the boat steering and drivetrain.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import argparse
 import math
 import time
 from dataclasses import dataclass
+from typing import Tuple
 
 try:
     from pymavlink import mavutil
@@ -61,8 +62,10 @@ class BoatState:
 class BoatActuatorCommand:
     timestamp_us: int = 0
     armed: bool = False
-    right: float = 0.0
-    left: float = 0.0
+    steering: float = 0.0
+    signed_thrust: float = 0.0
+    clutch: str = "neutral"
+    throttle: float = 0.0
 
 
 def now_us() -> int:
@@ -71,6 +74,14 @@ def now_us() -> int:
 
 def clamp(value: float, lower: float, upper: float) -> float:
     return max(lower, min(upper, value))
+
+
+def signed_thrust_to_drivetrain(signed_thrust: float, deadband: float) -> Tuple[str, float]:
+    if abs(signed_thrust) <= deadband:
+        return "neutral", 0.0
+
+    clutch = "forward" if signed_thrust > 0.0 else "reverse"
+    return clutch, abs(signed_thrust)
 
 
 def open_px4_connection(host: str, port: int, listen: bool):
@@ -151,7 +162,7 @@ def send_hil_gps(master, state: BoatState) -> None:
     )
 
 
-def receive_actuators(master, command: BoatActuatorCommand) -> BoatActuatorCommand:
+def receive_actuators(master, command: BoatActuatorCommand, deadband: float) -> BoatActuatorCommand:
     while True:
         msg = master.recv_match(type="HIL_ACTUATOR_CONTROLS", blocking=False)
 
@@ -160,11 +171,21 @@ def receive_actuators(master, command: BoatActuatorCommand) -> BoatActuatorComma
 
         controls = list(msg.controls)
         armed = bool(msg.mode & 128)
+        steering = clamp(float(controls[0]) if len(controls) > 0 else 0.0, -1.0, 1.0)
+        signed_thrust = clamp(float(controls[1]) if len(controls) > 1 else 0.0, -1.0, 1.0)
+
+        if not armed:
+            steering = 0.0
+            signed_thrust = 0.0
+
+        clutch, throttle = signed_thrust_to_drivetrain(signed_thrust, deadband)
         command = BoatActuatorCommand(
             timestamp_us=msg.time_usec,
             armed=armed,
-            right=clamp(float(controls[0]) if len(controls) > 0 else 0.0, -1.0, 1.0),
-            left=clamp(float(controls[1]) if len(controls) > 1 else 0.0, -1.0, 1.0),
+            steering=steering,
+            signed_thrust=signed_thrust,
+            clutch=clutch,
+            throttle=throttle,
         )
 
 
@@ -180,6 +201,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--sensor-rate", type=float, default=250.0, help="HIL_SENSOR rate in Hz")
     parser.add_argument("--gps-rate", type=float, default=5.0, help="HIL_GPS rate in Hz")
     parser.add_argument("--print-rate", type=float, default=2.0, help="Actuator print rate in Hz")
+    parser.add_argument(
+        "--deadband",
+        type=float,
+        default=0.03,
+        help="signed thrust deadband for neutral clutch selection",
+    )
     return parser.parse_args()
 
 
@@ -203,7 +230,7 @@ def main() -> None:
     while True:
         now = time.monotonic()
         state = BoatState(timestamp_us=now_us())
-        command = receive_actuators(master, command)
+        command = receive_actuators(master, command, args.deadband)
 
         if now >= next_heartbeat:
             send_heartbeat(master)
@@ -219,8 +246,12 @@ def main() -> None:
 
         if print_period > 0.0 and now >= next_print:
             print(
-                "actuator armed={} right={:.3f} left={:.3f}".format(
-                    command.armed, command.right, command.left
+                "actuator armed={} steering={:.3f} signed_thrust={:.3f} clutch={} throttle={:.3f}".format(
+                    command.armed,
+                    command.steering,
+                    command.signed_thrust,
+                    command.clutch,
+                    command.throttle,
                 )
             )
             next_print = now + print_period
