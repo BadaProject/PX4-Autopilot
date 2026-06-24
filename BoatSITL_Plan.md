@@ -723,15 +723,11 @@ param set-default CA_SV_CS_COUNT 1
 
 param set-default PWM_MAIN_FUNC1 201  # Servo1: steering
 param set-default PWM_MAIN_FUNC2 101  # Motor1: signed thrust
-param set-default PWM_MAIN_MIN1 1000
-param set-default PWM_MAIN_TRIM1 1500
-param set-default PWM_MAIN_MAX1 2000
-param set-default PWM_MAIN_MIN2 1000
-param set-default PWM_MAIN_TRIM2 1500
-param set-default PWM_MAIN_MAX2 2000
 ```
 
 현재 repo의 `1071_isaac_boat`는 1 engine + 1 clutch + 1 steering contract로 수정되었다. PX4 내부에는 clutch output을 만들지 않고, steering과 signed thrust만 output function에 배치한다.
+
+POSIX SITL의 `pwm_out_sim`은 `PWM_MAIN_FUNC*` 기능 매핑 파라미터만 생성하고, 실제 PWM driver에서 쓰는 `PWM_MAIN_MIN*`, `PWM_MAIN_MAX*`, `PWM_MAIN_TRIM*` 범위 파라미터는 생성하지 않는다. 따라서 `1071_isaac_boat`에서는 없는 PWM range 파라미터를 설정하지 않는다. 실제 Pixhawk firmware 또는 bench debug에서는 해당 보드의 PWM output driver가 제공하는 range/center 파라미터를 별도로 확인한다.
 
 ```text
 PX4 internal:

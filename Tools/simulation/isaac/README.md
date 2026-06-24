@@ -42,9 +42,22 @@ The Isaac bridge connects to PX4's simulator MAVLink endpoint and exchanges:
 - Isaac Sim to PX4: `HEARTBEAT`, `HIL_SENSOR`, `HIL_GPS`
 - PX4 to Isaac Sim: `HIL_ACTUATOR_CONTROLS`
 
-The first two actuator controls are treated as the boat's two main propulsion
-outputs. The exact left/right mapping must match the Isaac boat model's
-thruster layout.
+The first two actuator controls use the Isaac boat contract:
+
+```text
+HIL_ACTUATOR_CONTROLS.controls[0] = steering [-1, 1]
+HIL_ACTUATOR_CONTROLS.controls[1] = signed_thrust [-1, 1]
+```
+
+The bridge converts `signed_thrust` into a drivetrain command:
+
+```text
+signed_thrust > deadband  -> clutch forward, throttle abs(signed_thrust)
+signed_thrust < -deadband -> clutch reverse, throttle abs(signed_thrust)
+near zero                 -> clutch neutral, throttle 0
+```
+
+PX4 does not publish a separate clutch control axis for this SITL contract.
 
 ## Standalone bridge smoke test
 
@@ -58,4 +71,4 @@ python3 Tools/simulation/isaac/bridge/isaac_boat_mavlink_bridge.py --host 127.0.
 
 Isaac integration should replace the static `BoatState` sample with values read
 from the USD stage and apply received `BoatActuatorCommand` values to the boat
-thrusters.
+steering and drivetrain model.

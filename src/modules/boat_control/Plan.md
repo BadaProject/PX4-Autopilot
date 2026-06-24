@@ -1109,7 +1109,7 @@ mavlink stream -s ACTUATOR_OUTPUT_STATUS -r 20
 - [x] `rc.boat_apps`에서 `boat_drivetrain start` 삭제.
 - [x] boat board config에서 `CONFIG_DRIVERS_BOAT_DRIVETRAIN` 삭제.
 - [x] `1071_isaac_boat` output function mapping에서 CH1 steering, CH2 signed thrust 설정.
-- [x] `1071_isaac_boat` channel 1/2 min/trim/max를 1000/1500/2000 us 기준으로 설정.
+- [x] POSIX SITL `1071_isaac_boat`에서는 `pwm_out_sim`이 제공하는 `PWM_MAIN_FUNC1/2`만 설정하고, 존재하지 않는 `PWM_MAIN_MIN/TRIM/MAX*` 설정은 제거.
 - [x] Isaac Sim bridge에서 `HIL_ACTUATOR_CONTROLS.controls[0/1]`를 steering/signed thrust로 처리.
 - [x] Isaac Sim bridge에서 signed thrust deadband 기반 clutch forward/neutral/reverse, throttle magnitude 변환 구현.
 - [x] POSIX SITL GCS MAVLink link는 `px4-rc.mavlink`에서 `SERVO_OUTPUT_RAW_0` 50 Hz stream을 사용.
@@ -1142,3 +1142,82 @@ SITL 확인:
 - `servo2_raw`가 deadband 내부이면 clutch neutral, throttle 0이 되는지 확인한다.
 - forward/reverse 전환 시 throttle cut과 neutral delay가 적용되는지 확인한다.
 - MAVLink timeout 시 throttle 0 + clutch neutral이 즉시 적용되는지 확인한다.
+
+## 15. Current Open Issues From Implementation Review
+
+2026-06-24 코드 확인 기준으로 `boat_control` 핵심 구조와 signed thrust path, diesel ramp, Isaac SITL bridge 연동은 대부분 구현되어 있다. 다만 Plan 전체 완료로 보기 전에 아래 항목을 해결하거나 검증해야 한다.
+
+### 15.1 POSCTL Reverse Course Hold Signed Speed Loss
+
+상태: 수정됨. SITL/bench 검증 필요.
+
+문제:
+
+- `BoatManualMode::position()`은 POSCTL throttle negative 입력을 `[-BOAT_SPEED_LIM, BOAT_SPEED_LIM]` signed speed로 변환한다.
+- roll centered + speed nonzero 조건에서는 `matrix::sign(speed_setpoint)`를 사용해 현재 heading의 반대 방향 target waypoint를 생성하고, `rover_position_setpoint.cruising_speed`에 negative speed를 publish한다.
+- 기존 구현에서는 `BoatPosControl::updatePosControl()`이 `_cruising_speed`를 `[0, BOAT_SPEED_LIM]` 범위로 constrain했다.
+- 결과적으로 POSCTL 후진 course hold에서 target은 뒤쪽에 생성되지만 `rover_speed_setpoint.speed_body_x`는 0 이상으로 바뀌어 후진 thrust가 생성되지 않았다.
+- 현재 구현은 `BoatPosControl`의 speed constrain 범위를 `[-BOAT_SPEED_LIM, BOAT_SPEED_LIM]`로 바꿔 signed speed를 보존한다.
+
+영향:
+
+- 코드상으로는 Plan의 “POSCTL throttle negative에서 `rover_speed_setpoint.speed_body_x < 0`이 publish되는지 확인” 항목을 만족하도록 수정되었다.
+- 실제 SITL/bench에서 `BoatSpeedControl`, `BoatActControl`, output mapping까지 음수 명령이 유지되는지 확인해야 한다.
+
+권장 수정 방향:
+
+- 완료: `BoatPosControl`에서 speed constrain 범위를 `[-BOAT_SPEED_LIM, BOAT_SPEED_LIM]`로 바꿔 signed speed를 보존한다.
+- 후진 course hold yaw policy를 명확히 정한다.
+- 현재 `BoatManualMode` 구조는 후진 target waypoint를 현재 heading 반대 방향에 두고, `BoatPosControl`은 negative speed일 때 `bearing_setpoint + pi`를 yaw setpoint로 사용한다.
+- 이 정책은 bow heading을 유지한 채 뒤로 물러나는 동작을 의도한다. 현장 운용에서 “후진 방향을 향해 선회”가 더 자연스럽다면 `BoatManualMode`와 `BoatPosControl`을 함께 조정한다.
+
+완료 기준:
+
+- POSCTL throttle negative + roll centered에서 `rover_position_setpoint.cruising_speed < 0`이 유지된다.
+- `BoatPosControl` 이후 `rover_speed_setpoint.speed_body_x < 0`이 publish된다.
+- `BoatSpeedControl` 이후 `rover_throttle_setpoint.throttle_body_x < 0`이 publish된다.
+- `BoatActControl` 이후 `actuator_motors.control[0] < 0`이 publish된다.
+- 후진 course hold 중 yaw setpoint 방향이 선택한 정책과 일관된다.
+
+### 15.2 Failsafe Or Unsupported Nav State Stop Behavior
+
+상태: 수정됨. SITL/bench 검증 필요.
+
+문제:
+
+- 기존 구현에서 `BoatControl::generateSetpoints()`는 미지원 nav_state default 경로에서 새 setpoint를 publish하지 않았다.
+- armed 상태이고 sanity check가 통과하면 controller update는 계속 실행될 수 있었다.
+- `BoatActControl`은 기존 finite throttle/steering setpoint가 남아 있으면 actuator topic을 계속 publish할 수 있었다.
+- 현재 구현은 `generateSetpoints()`가 지원 nav_state 여부를 bool로 반환하고, 미지원 nav_state에서는 `reset()`과 `stopVehicle()`을 호출한 뒤 controller update를 건너뛴다.
+
+영향:
+
+- Plan의 “disarm/failsafe/emergency stop에서는 ramp down을 기다리지 않고 즉시 signed thrust 0” 요구가 미지원 nav_state 경로에서도 코드상 적용된다.
+- 실제 failsafe nav_state 전이와 output topic을 SITL/bench에서 확인해야 한다.
+
+권장 수정 방향:
+
+- 완료: `BoatControl`에서 지원하지 않는 nav_state를 명시적으로 감지해 `reset()`과 `stopVehicle()`을 호출한다.
+- 또는 `BoatActControl`에 setpoint timeout을 추가해 일정 시간 새 setpoint가 없으면 motor/steering을 0으로 publish한다.
+
+완료 기준:
+
+- disarm뿐 아니라 failsafe/unsupported nav_state에서도 `actuator_motors.control[0] = 0`이 즉시 publish된다.
+- final signed thrust ramp limiter가 stop path를 지연하지 않는다.
+
+### 15.3 Remaining External Driver And Hardware Verification
+
+상태: Plan checklist에 미완료로 남아 있음.
+
+남은 항목:
+
+- 실제 firmware 외부 boat driver가 붙는 MAVLink link에서 `SERVO_OUTPUT_RAW_0` stream rate를 요구 rate로 설정한다.
+- 외부 MAVLink boat driver에서 `SERVO_OUTPUT_RAW.servo1_raw/servo2_raw` 처리 구현을 확인한다.
+- 외부 driver에서 clutch state machine, timeout, reverse inhibit를 검증한다.
+- 실제 hardware 또는 SITL MAVLink Inspector에서 channel 2 signed output이 1000/1500/2000 us로 보존되는지 확인한다.
+- `pwm_out` physical pins로 MAVLink 값과 PWM pin 값이 일치하는지 bench 검증한다.
+
+비고:
+
+- 위 항목은 `boat_control` 내부 구현 범위 밖이지만, Plan 전체 완료 판단에는 포함된다.
+- Isaac Sim bridge의 `HIL_ACTUATOR_CONTROLS.controls[0] = steering`, `controls[1] = signed_thrust` 처리와 deadband 기반 clutch/throttle 변환은 코드상 존재한다.

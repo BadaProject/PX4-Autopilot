@@ -38,9 +38,3 @@ param set-default CA_SV_CS_COUNT 1
 
 param set-default PWM_MAIN_FUNC1 201
 param set-default PWM_MAIN_FUNC2 101
-param set-default PWM_MAIN_MIN1 1000
-param set-default PWM_MAIN_TRIM1 1500
-param set-default PWM_MAIN_MAX1 2000
-param set-default PWM_MAIN_MIN2 1000
-param set-default PWM_MAIN_TRIM2 1500
-param set-default PWM_MAIN_MAX2 2000

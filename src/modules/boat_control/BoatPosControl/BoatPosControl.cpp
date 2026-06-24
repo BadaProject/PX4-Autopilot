@@ -70,7 +70,7 @@ void BoatPosControl::updatePosControl()
 	}
 
 	const float speed_setpoint = math::constrain(PX4_ISFINITE(_cruising_speed) ? _cruising_speed :
-				     _param_boat_speed_lim.get(), 0.f, _param_boat_speed_lim.get());
+				     _param_boat_speed_lim.get(), -_param_boat_speed_lim.get(), _param_boat_speed_lim.get());
 
 	rover_speed_setpoint_s rover_speed_setpoint{};
 	rover_speed_setpoint.timestamp = timestamp;
