@@ -109,12 +109,12 @@ private:
 	} _paramHandle;
 
 	struct {
-		float param_mpc_jerk_max;
-		float param_mpc_acc_hor;
-		float param_mpc_acc_hor_max;
-		float param_mpc_jerk_auto;
-		float param_mpc_acc_up_max;
-		float param_mpc_acc_down_max;
+		float param_mpc_jerk_max{8.f};
+		float param_mpc_acc_hor{3.f};
+		float param_mpc_acc_hor_max{5.f};
+		float param_mpc_jerk_auto{4.f};
+		float param_mpc_acc_up_max{4.f};
+		float param_mpc_acc_down_max{3.f};
 
 	} _params;
 

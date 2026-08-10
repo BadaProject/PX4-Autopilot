@@ -172,6 +172,120 @@ parameters:
         decimal: 6
         default: 0.00058466
 
+      BOAT_SPD_EN:
+        description:
+          short: Enable boat closed-loop speed feedback
+        type: int32
+        min: 0
+        max: 1
+        default: 0
+
+      BOAT_SPD_P:
+        description:
+          short: Boat speed feedback proportional gain
+        type: float
+        min: 0
+        max: 100
+        increment: 0.01
+        decimal: 3
+        default: 0.0
+
+      BOAT_SPD_I:
+        description:
+          short: Boat speed feedback integral gain
+        type: float
+        min: 0
+        max: 100
+        increment: 0.01
+        decimal: 3
+        default: 0.0
+
+      BOAT_SPD_D:
+        description:
+          short: Boat speed feedback derivative gain
+        type: float
+        min: 0
+        max: 100
+        increment: 0.01
+        decimal: 3
+        default: 0.0
+
+      BOAT_SPD_IMAX:
+        description:
+          short: Boat speed feedback integral limit
+        type: float
+        min: 0
+        max: 1
+        increment: 0.01
+        decimal: 2
+        default: 0.2
+
+      BOAT_RAMP_SPD:
+        description:
+          short: Boat diesel startup ramp target speed
+        type: float
+        unit: m/s
+        min: 0
+        max: 20
+        increment: 0.1
+        decimal: 1
+        default: 0.0
+
+      BOAT_RAMP_HOLD:
+        description:
+          short: Boat diesel startup ramp hold time
+        type: float
+        unit: s
+        min: 0
+        max: 30
+        increment: 0.1
+        decimal: 1
+        default: 2.0
+
+      BOAT_SPD_ACC_UP:
+        description:
+          short: Boat speed setpoint ramp-up limit
+        type: float
+        unit: m/s^2
+        min: 0
+        max: 10
+        increment: 0.01
+        decimal: 2
+        default: 0.2
+
+      BOAT_SPD_ACC_DN:
+        description:
+          short: Boat speed setpoint ramp-down limit
+        type: float
+        unit: m/s^2
+        min: 0
+        max: 10
+        increment: 0.01
+        decimal: 2
+        default: 0.5
+
+      BOAT_ENG_RAMP_UP:
+        description:
+          short: Boat signed thrust ramp-up limit
+        type: float
+        unit: 1/s
+        min: 0
+        max: 10
+        increment: 0.01
+        decimal: 2
+        default: 0.05
+
+      BOAT_ENG_RAMP_DN:
+        description:
+          short: Boat signed thrust ramp-down limit
+        type: float
+        unit: 1/s
+        min: 0
+        max: 10
+        increment: 0.01
+        decimal: 2
+        default: 0.20
+
       BOAT_DEBUG:
         description:
           short: Enable boat control debug logging

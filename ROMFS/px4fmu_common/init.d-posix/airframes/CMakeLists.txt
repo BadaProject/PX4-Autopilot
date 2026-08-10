@@ -64,6 +64,7 @@ px4_add_romfs_files(
 	1045_gazebo-classic_quadtailsitter
 	1062_flightgear_tf-r1
 	1070_gazebo-classic_boat
+	1071_isaac_boat
 
 	2507_gazebo-classic_cloudship
 

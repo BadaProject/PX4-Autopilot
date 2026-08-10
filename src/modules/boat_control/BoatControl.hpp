@@ -70,7 +70,7 @@ protected:
 
 private:
 	void Run() override;
-	void generateSetpoints();
+	bool generateSetpoints();
 	void updateControllers();
 	void runSanityChecks();
 	void reset();

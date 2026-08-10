@@ -1,0 +1,40 @@
+#!/bin/sh
+#
+# @name Isaac Sim Boat
+# @type Boat
+#
+
+. ${R}etc/init.d/rc.boat_defaults
+
+PX4_SIMULATOR=${PX4_SIMULATOR:=isaac}
+PX4_SIM_MODEL=${PX4_SIM_MODEL:=isaac_boat}
+
+param set-default CA_AIRFRAME 9
+
+# Boat actuator contract:
+# - PX4 internal:
+#   actuator_servos.control[0] = steering
+#   actuator_motors.control[0] = signed_thrust
+# - SITL/HIL order:
+#   HIL_ACTUATOR_CONTROLS.controls[0] = steering
+#   HIL_ACTUATOR_CONTROLS.controls[1] = signed_thrust
+# - Real boat primary interface:
+#   SERVO_OUTPUT_RAW.servo1_raw = steering PWM-equivalent
+#   SERVO_OUTPUT_RAW.servo2_raw = signed_thrust PWM-equivalent
+# - Debug/backup physical pins:
+#   PWM CH1 = steering
+#   PWM CH2 = signed_thrust
+# - signed_thrust sign is converted to clutch state by the Isaac bridge or
+#   external MAVLink boat driver.
+param set-default CA_ROTOR_COUNT 1
+param set-default CA_ROTOR0_AX 1
+param set-default CA_ROTOR0_AZ 0
+param set-default CA_ROTOR0_KM 0
+param set-default CA_ROTOR0_PX -3.7
+param set-default CA_ROTOR0_PY 0
+param set-default CA_ROTOR0_PZ -0.15
+param set-default CA_R_REV 1
+param set-default CA_SV_CS_COUNT 1
+
+param set-default PWM_MAIN_FUNC1 201
+param set-default PWM_MAIN_FUNC2 101

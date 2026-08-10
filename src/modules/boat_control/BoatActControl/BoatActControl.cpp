@@ -23,13 +23,13 @@ void BoatActControl::updateActControl()
 	if (_rover_throttle_setpoint_sub.updated()) {
 		rover_throttle_setpoint_s rover_throttle_setpoint{};
 		_rover_throttle_setpoint_sub.copy(&rover_throttle_setpoint);
-		_throttle_setpoint = rover_throttle_setpoint.throttle_body_x;
+		_signed_thrust_setpoint = rover_throttle_setpoint.throttle_body_x;
 	}
 
-	if (PX4_ISFINITE(_throttle_setpoint)) {
+	if (PX4_ISFINITE(_signed_thrust_setpoint)) {
 		actuator_motors_s actuator_motors{};
 		actuator_motors.reversible_flags = _param_r_rev.get();
-		actuator_motors.control[0] = math::constrain(_throttle_setpoint, 0.f, 1.f);
+		actuator_motors.control[0] = slewSignedThrust(math::constrain(_signed_thrust_setpoint, -1.f, 1.f));
 		actuator_motors.timestamp = _timestamp;
 		_actuator_motors_pub.publish(actuator_motors);
 	}
@@ -63,6 +63,33 @@ void BoatActControl::stopVehicle()
 	actuator_servos.timestamp = _timestamp;
 	_actuator_servos_pub.publish(actuator_servos);
 
-	_throttle_setpoint = NAN;
+	reset();
+}
+
+void BoatActControl::reset()
+{
+	_signed_thrust_setpoint = NAN;
 	_steering_setpoint = NAN;
+	_last_signed_thrust_setpoint = 0.f;
+	_last_signed_thrust_update = 0;
+}
+
+float BoatActControl::slewSignedThrust(float signed_thrust_setpoint)
+{
+	const float dt = _last_signed_thrust_update > 0 ?
+			 math::constrain((_timestamp - _last_signed_thrust_update) * 1e-6f, 0.001f, 0.1f) : 0.01f;
+	const bool increasing_magnitude = fabsf(signed_thrust_setpoint) > fabsf(_last_signed_thrust_setpoint);
+	const float rate_limit = math::max(increasing_magnitude ? _param_boat_eng_ramp_up.get() :
+					  _param_boat_eng_ramp_dn.get(), 0.f);
+
+	if (rate_limit > FLT_EPSILON) {
+		_last_signed_thrust_setpoint += math::constrain(signed_thrust_setpoint - _last_signed_thrust_setpoint,
+						    -rate_limit * dt, rate_limit * dt);
+
+	} else {
+		_last_signed_thrust_setpoint = signed_thrust_setpoint;
+	}
+
+	_last_signed_thrust_update = _timestamp;
+	return math::constrain(_last_signed_thrust_setpoint, -1.f, 1.f);
 }

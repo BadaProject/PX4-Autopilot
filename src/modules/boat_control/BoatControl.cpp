@@ -82,7 +82,13 @@ void BoatControl::Run()
 
 	if (_vehicle_control_mode.flag_armed && _sanity_checks_passed) {
 		_was_armed = true;
-		generateSetpoints();
+
+		if (!generateSetpoints()) {
+			reset();
+			_boat_act_control.stopVehicle();
+			return;
+		}
+
 		updateControllers();
 
 	} else if (_was_armed) {
@@ -92,7 +98,7 @@ void BoatControl::Run()
 	}
 }
 
-void BoatControl::generateSetpoints()
+bool BoatControl::generateSetpoints()
 {
 	vehicle_status_s vehicle_status{};
 	_vehicle_status_sub.copy(&vehicle_status);
@@ -102,30 +108,30 @@ void BoatControl::generateSetpoints()
 	case vehicle_status_s::NAVIGATION_STATE_AUTO_LOITER:
 	case vehicle_status_s::NAVIGATION_STATE_AUTO_RTL:
 		_auto_mode.autoControl();
-		break;
+		return true;
 
 	case vehicle_status_s::NAVIGATION_STATE_OFFBOARD:
 		_offboard_mode.offboardControl();
-		break;
+		return true;
 
 	case vehicle_status_s::NAVIGATION_STATE_MANUAL:
 		_manual_mode.manual();
-		break;
+		return true;
 
 	case vehicle_status_s::NAVIGATION_STATE_ACRO:
 		_manual_mode.acro();
-		break;
+		return true;
 
 	case vehicle_status_s::NAVIGATION_STATE_STAB:
 		_manual_mode.stab();
-		break;
+		return true;
 
 	case vehicle_status_s::NAVIGATION_STATE_POSCTL:
 		_manual_mode.position();
-		break;
+		return true;
 
 	default:
-		break;
+		return false;
 	}
 }
 
@@ -174,6 +180,7 @@ void BoatControl::reset()
 	_boat_pos_control.reset();
 	_boat_speed_control.reset();
 	_boat_att_control.reset();
+	_boat_act_control.reset();
 	_manual_mode.reset();
 }
 
