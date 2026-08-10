@@ -37,7 +37,10 @@ else()
     find_package(gz-transport NAMES gz-transport13)
 endif()
 
-file(GLOB gz_worlds ${PX4_SOURCE_DIR}/Tools/simulation/gz/worlds/*.sdf)
+file(GLOB gz_worlds
+	${PX4_SOURCE_DIR}/Tools/simulation/gz/worlds/*.sdf
+	${PX4_SOURCE_DIR}/Tools/simulation/gz_custom/worlds/*.sdf
+)
 file(GLOB gz_airframes ${PX4_SOURCE_DIR}/ROMFS/px4fmu_common/init.d-posix/airframes/*_gz_*)
 
 if (gz-transport_FOUND)

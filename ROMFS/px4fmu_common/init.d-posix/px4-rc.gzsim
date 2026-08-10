@@ -28,6 +28,14 @@ else
 	exit 1
 fi
 
+# Setup gz environment variables.
+if [ -f ./gz_env.sh ]; then
+	. ./gz_env.sh
+
+elif [ -f ../gz_env.sh ]; then
+	. ../gz_env.sh
+fi
+
 # If not standalone launch the world
 if [ -z "${PX4_GZ_STANDALONE}" ]; then
 
@@ -37,17 +45,15 @@ if [ -z "${PX4_GZ_STANDALONE}" ]; then
 	# shellcheck disable=SC2153
 	if [ -z "${gz_world}" ] && [ -n "${PX4_GZ_WORLD}" ]; then
 
-		# Setup gz environment variables
-		if [ -f ./gz_env.sh ]; then
-			. ./gz_env.sh
+		gz_world_path="${PX4_GZ_WORLDS}/${PX4_GZ_WORLD}.sdf"
 
-		elif [ -f ../gz_env.sh ]; then
-			. ../gz_env.sh
+		if [ -n "${PX4_GZ_CUSTOM_WORLDS}" ] && [ -f "${PX4_GZ_CUSTOM_WORLDS}/${PX4_GZ_WORLD}.sdf" ]; then
+			gz_world_path="${PX4_GZ_CUSTOM_WORLDS}/${PX4_GZ_WORLD}.sdf"
 		fi
 
-		echo "INFO  [init] Starting gazebo with world: ${PX4_GZ_WORLDS}/${PX4_GZ_WORLD}.sdf"
+		echo "INFO  [init] Starting gazebo with world: ${gz_world_path}"
 
-		${gz_command} ${gz_sub_command} --verbose=${GZ_VERBOSE:=1} -r -s "${PX4_GZ_WORLDS}/${PX4_GZ_WORLD}.sdf" &
+		${gz_command} ${gz_sub_command} --verbose=${GZ_VERBOSE:=1} -r -s "${gz_world_path}" &
 
 		if [ -z "${HEADLESS}" ]; then
 			echo "INFO  [init] Starting gz gui"
@@ -133,8 +139,14 @@ if [ -n "${PX4_SIM_MODEL#*gz_}" ] && [ -z "${PX4_GZ_MODEL_NAME}" ]; then
 
 	echo "INFO  [init] Spawning Gazebo model"
 
+	gz_model_path="${PX4_GZ_MODELS}/${MODEL_NAME}/model.sdf"
+
+	if [ -n "${PX4_GZ_CUSTOM_MODELS}" ] && [ -f "${PX4_GZ_CUSTOM_MODELS}/${MODEL_NAME}/model.sdf" ]; then
+		gz_model_path="${PX4_GZ_CUSTOM_MODELS}/${MODEL_NAME}/model.sdf"
+	fi
+
 	# include the actual SDF in this one, containing the pose if given
-	sdf_str="<sdf version=\"1.6\"> <include> <uri>file://${PX4_GZ_MODELS}/${MODEL_NAME}/model.sdf</uri> ${sdf_pose_str} </include> </sdf>"
+	sdf_str="<sdf version=\"1.6\"> <include> <uri>file://${gz_model_path}</uri> ${sdf_pose_str} </include> </sdf>"
 
 	# Spawn model
 	${gz_command} service -s "/world/${PX4_GZ_WORLD}/create" --reqtype gz.msgs.EntityFactory \

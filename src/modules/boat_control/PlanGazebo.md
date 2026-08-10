@@ -61,8 +61,8 @@ px4-rc.simulator
         v
 px4-rc.gzsim
         |
-        +--> gz sim 실행: Tools/simulation/gz/worlds/boat.sdf
-        +--> gz_bridge spawn: Tools/simulation/gz/models/boat/model.sdf
+        +--> gz sim 실행: Tools/simulation/gz_custom/worlds/boat.sdf
+        +--> gz_bridge spawn: Tools/simulation/gz_custom/models/boat/model.sdf
         +--> gz_bridge start -w boat -n boat_0
         |
         v
@@ -98,8 +98,8 @@ Wheel 인터페이스 (`SIM_GZ_WH_*`)를 propeller에 사용하는 이유:
 ## 4. 신규/수정 파일 목록
 
 ```
-Tools/simulation/gz/worlds/boat.sdf          (신규) 수면 세계
-Tools/simulation/gz/models/boat/             (신규) 보트 모델
+Tools/simulation/gz_custom/worlds/boat.sdf   (신규) 수면 세계
+Tools/simulation/gz_custom/models/boat/      (신규) 보트 모델
     model.config
     model.sdf
 ROMFS/px4fmu_common/init.d-posix/airframes/
@@ -109,13 +109,19 @@ ROMFS/px4fmu_common/init.d-posix/airframes/
 boards/px4/sitl/boat.px4board               (수정) GZ 모듈 활성화
 ```
 
+`Tools/simulation/gz`는 `PX4/PX4-gazebo-models` submodule이므로, 메인
+PX4-Autopilot 브랜치에서 직접 추적해야 하는 boat 전용 임시 자산은
+`Tools/simulation/gz_custom` 아래에 둔다. `px4-rc.gzsim`과
+`gz_bridge/CMakeLists.txt`는 기본 submodule 자산과 custom 자산을 함께 찾도록
+확장한다.
+
 ---
 
 ## 5. 항목별 구현 상세
 
 ### 5.1 Gazebo World: `boat.sdf`
 
-파일 위치: `Tools/simulation/gz/worlds/boat.sdf`
+파일 위치: `Tools/simulation/gz_custom/worlds/boat.sdf`
 
 참고: `rover.sdf`를 기반으로 ground_plane 대신 water surface를 추가한다.
 
@@ -148,7 +154,7 @@ water surface 시각:
 
 ### 5.2 Gazebo Boat Model: `boat/model.sdf`
 
-파일 위치: `Tools/simulation/gz/models/boat/model.sdf`
+파일 위치: `Tools/simulation/gz_custom/models/boat/model.sdf`
 
 #### 5.2.1 링크 구조
 
@@ -428,11 +434,11 @@ if [ "$PX4_SIMULATOR" = "gz" ] || [ "$(param show -q SIM_GZ_EN)" = "1" ]; then
 MODEL_NAME="${PX4_SIM_MODEL#*gz_}"    # → "boat"
 MODEL_NAME_INSTANCE="boat_0"
 
-# Tools/simulation/gz/models/boat/model.sdf 사용
+# Tools/simulation/gz_custom/models/boat/model.sdf 사용
 gz_bridge start -w boat -n boat_0
 ```
 
-`Tools/simulation/gz/models/boat/` 디렉토리가 존재해야 한다.
+`Tools/simulation/gz_custom/models/boat/` 디렉토리가 존재해야 한다.
 
 ### 6.3 `rc.vehicle_setup` → `rc.boat_apps`
 
@@ -455,11 +461,11 @@ gz_bridge start -w boat -n boat_0
 
 ### Phase 2: 최소 Gazebo 모델 생성
 
-1. `Tools/simulation/gz/worlds/boat.sdf` 생성
+1. `Tools/simulation/gz_custom/worlds/boat.sdf` 생성
    - `rover.sdf` 기반으로 복사 후 Buoyancy 플러그인 추가
    - ground_plane 재질을 파란색 반투명 water surface로 변경
-2. `Tools/simulation/gz/models/boat/model.config` 생성
-3. `Tools/simulation/gz/models/boat/model.sdf` 생성
+2. `Tools/simulation/gz_custom/models/boat/model.config` 생성
+3. `Tools/simulation/gz_custom/models/boat/model.sdf` 생성
    - 단순 box 선체 (mesh 없음)
    - 센서 4종 포함
    - propeller_joint + rudder_joint 포함
